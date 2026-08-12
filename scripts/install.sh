@@ -118,15 +118,27 @@ log "copiando arquivos para '$TARGET_DIR'..."
 for d in .claude .devcontainer prompts scripts; do
   [[ -d "$TMP_DIR/$d" ]] || die "item obrigatório ausente no template: $d/"
 done
-for f in .env.example .secrets.example .gitignore skills-lock.json; do
+for f in .env.example .gitignore skills-lock.json; do
   [[ -f "$TMP_DIR/$f" ]] || die "item obrigatório ausente no template: $f"
 done
 
-for d in .claude .devcontainer prompts scripts; do
+for d in .claude .devcontainer prompts; do
   mkdir -p "$TARGET_DIR/$d"
   cp -a "$TMP_DIR/$d/." "$TARGET_DIR/$d/"
 done
-for f in .env.example .secrets.example .gitignore skills-lock.json; do
+# scripts/ vai item a item, pulando os instaladores: install.sh e install.ps1
+# materializam um projeto novo a partir do template e não têm função dentro do
+# projeto gerado.
+mkdir -p "$TARGET_DIR/scripts"
+shopt -s dotglob nullglob
+for p in "$TMP_DIR"/scripts/*; do
+  case "${p##*/}" in
+    install.sh|install.ps1) continue ;;
+  esac
+  cp -a "$p" "$TARGET_DIR/scripts/"
+done
+shopt -u dotglob nullglob
+for f in .env.example .gitignore skills-lock.json; do
   cp -a "$TMP_DIR/$f" "$TARGET_DIR/$f"
 done
 
@@ -245,8 +257,8 @@ grep -q "^PROJECT_FOLDER=" .devcontainer/.env \
 
 # Nada a gerar aqui: a lista fechada do RF6 não inclui .claude/PRD.md — o
 # projeto novo nasce sem PRD, a ser escrito pelo usuário (ver prompts/1-create-prd.md).
-# Os itens que só fazem sentido no template nunca chegam ao projeto gerado.
-# Os instaladores em scripts/ são copiados de propósito (scripts/ vai inteiro).
+# Os itens que só fazem sentido no template nunca chegam ao projeto gerado —
+# incluindo scripts/install.sh e scripts/install.ps1, que ficam de fora da cópia.
 
 # --- git init --------------------------------------------------------------
 
@@ -265,7 +277,7 @@ echo "  container:      $CONTAINER_SLUG"
 echo "  PROJECT_FOLDER: $PROJECT_FOLDER (igual ao workspaceFolder)"
 echo "Próximos passos:"
 echo "  1. Copie .env.example para .env (GIT_USERNAME/GIT_EMAIL/GIT_NAME) e"
-echo "     .secrets.example para .secrets (GIT_TOKKEN)."
+echo "     preencha GIT_TOKKEN em .devcontainer/.env."
 echo "  2. Rode scripts/build-image-devcontainer.sh (ou publique a imagem em um registry)."
 echo "  3. Abra a pasta no VS Code."
 echo "  4. Ctrl+Shift+P -> Dev Containers: Reopen in Container."

@@ -112,7 +112,11 @@ try {
   # estiver aqui (README.md, CLAUDE.md, .claude/PRD.md, .claude/settings.local.json,
   # .agents/skills/, ...) fica só no template.
   $dirItems = @('.claude', '.devcontainer', 'prompts', 'scripts')
-  $fileItems = @('.env.example', '.secrets.example', '.gitignore', 'skills-lock.json')
+  $fileItems = @('.env.example', '.gitignore', 'skills-lock.json')
+  # scripts/ vai item a item, pulando os instaladores: install.sh e install.ps1
+  # materializam um projeto novo a partir do template e não têm função dentro
+  # do projeto gerado.
+  $scriptsExclude = @('install.sh', 'install.ps1')
 
   # valida tudo antes de copiar qualquer coisa, para não deixar o destino pela metade
   foreach ($d in $dirItems) {
@@ -125,7 +129,11 @@ try {
   foreach ($d in $dirItems) {
     $dest = Join-Path $Dir $d
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    Copy-Item -Path (Join-Path (Join-Path $TmpDir $d) '*') -Destination $dest -Recurse -Force
+    if ($d -eq 'scripts') {
+      Copy-Item -Path (Join-Path (Join-Path $TmpDir $d) '*') -Destination $dest -Recurse -Force -Exclude $scriptsExclude
+    } else {
+      Copy-Item -Path (Join-Path (Join-Path $TmpDir $d) '*') -Destination $dest -Recurse -Force
+    }
   }
   foreach ($f in $fileItems) {
     Copy-Item -Path (Join-Path $TmpDir $f) -Destination (Join-Path $Dir $f) -Force
@@ -224,8 +232,8 @@ if (-not $seenEnvFolder) { $envLines += "PROJECT_FOLDER=$ProjectFolder" }
 
 # Nada a gerar aqui: a lista fechada do RF6 não inclui .claude/PRD.md — o
 # projeto novo nasce sem PRD, a ser escrito pelo usuário (ver prompts/1-create-prd.md).
-# Os itens que só fazem sentido no template nunca chegam ao projeto gerado.
-# Os instaladores em scripts/ são copiados de propósito (scripts/ vai inteiro).
+# Os itens que só fazem sentido no template nunca chegam ao projeto gerado —
+# incluindo scripts/install.sh e scripts/install.ps1, que ficam de fora da cópia.
 
 # --- git init ------------------------------------------------------------------
 
@@ -245,7 +253,7 @@ Write-Host "  container:      $ContainerSlug"
 Write-Host "  PROJECT_FOLDER: $ProjectFolder (igual ao workspaceFolder)"
 Write-Host "Próximos passos:"
 Write-Host "  1. Copie .env.example para .env (GIT_USERNAME/GIT_EMAIL/GIT_NAME) e"
-Write-Host "     .secrets.example para .secrets (GIT_TOKKEN)."
+Write-Host "     preencha GIT_TOKKEN em .devcontainer/.env."
 Write-Host "  2. Construa a imagem (scripts/build-image-devcontainer.sh via WSL/Git Bash, ou 'docker build')"
 Write-Host "     ou publique-a em um registry."
 Write-Host "  3. Abra a pasta no VS Code."

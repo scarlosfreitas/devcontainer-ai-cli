@@ -103,14 +103,16 @@ O produto não tem interface gráfica; a "navegação" é a sequência de comand
    partir do `.devcontainer/.env.example`, roda `git init` e cria o commit inicial. O
    `.claude/PRD.md` **não** é copiado nem regerado — o projeto nasce sem PRD, a ser escrito pelo
    usuário (`prompts/1-create-prd.md`).
-5. O usuário preenche `.env` a partir de `.env.example` e `GIT_TOKKEN` o tokken manualmente
+5. O usuário preenche as credenciais git em `.devcontainer/.env` (`GIT_USERNAME`, `GIT_EMAIL`,
+   `GIT_NAME` e o segredo `GIT_TOKKEN`), a partir do modelo `.devcontainer/.env.example`. O
+   `GIT_TOKKEN` é sempre preenchido à mão — o instalador não o coleta nem o escreve.
 6. O `docker-compose.yml` referencia a imagem pronta (`${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}`,
    RF13) em vez de buildar a partir do `Dockerfile-devcontainer` a cada subida — a imagem deve
    existir localmente (via `scripts/build-image-devcontainer.sh`, no modo padrão ou `--local`) ou
    estar publicada em um registry antes deste passo.
 7. O usuário abre a pasta no VS Code e escolhe **Dev Containers: Reopen in Container**.
 8. O `postCreate.sh` recria, dentro do container, as credenciais git (`~/.git-credentials`) e o
-   `GH_TOKEN` da `gh` CLI a partir do `.env`/`.secrets` da raiz.
+   `GH_TOKEN` da `gh` CLI a partir do `.devcontainer/.env`.
 9. O usuário faz login em cada CLI de IA que for usar (Claude Code, Codex CLI, Gemini CLI,
    Antigravity CLI) e começa a trabalhar.
 
@@ -205,12 +207,16 @@ lugares**: `PROJECT_FOLDER` (em `.devcontainer/.env`) e `workspaceFolder` (em
 ### RF4 — Geração do `.devcontainer/.env`
 
 O instalador **SHALL** copiar `.devcontainer/.env.example` para `.devcontainer/.env` e atualizar
-`DOCKER_IMAGE_NAME`, `CONTAINER_NAME` e `GIT_TOKKEN`  com o nome do projeto normalizado (RF2), além de
-`PROJECT_FOLDER` conforme o RF3.
+`CONTAINER_NAME` com o nome do projeto normalizado (RF2), além de `PROJECT_FOLDER` conforme o RF3.
+`DOCKER_IMAGE_NAME` e `DOCKER_IMAGE_TAG` **não** são reescritos — o projeto gerado herda os valores
+do `.env.example` como estão, porque a imagem é construída e publicada à parte (RF13), não uma por
+projeto. As credenciais git (`GIT_USERNAME`, `GIT_EMAIL`, `GIT_NAME`, `GIT_TOKKEN`) também não são
+tocadas: o instalador não coleta segredo, e o usuário as preenche à mão depois.
 
 * **Cenário: nome com espaços e maiúsculas**
   * **WHEN** o nome informado é `Meu Projeto Novo`
-  * **THEN** `DOCKER_IMAGE_NAME=meu-projeto-novo` e `CONTAINER_NAME=meu-projeto-novo`.
+  * **THEN** `CONTAINER_NAME=meu-projeto-novo`, e `DOCKER_IMAGE_NAME`/`DOCKER_IMAGE_TAG` seguem
+    com os valores herdados do `.env.example`.
 
 ### RF5 — Personalização do `devcontainer.json`
 
@@ -346,22 +352,22 @@ definir `CLAUDE_CONFIG_DIR=/home/app/.claude`.
 ### RF9 — Credenciais git e `GH_TOKEN` dentro do container
 
 O `postCreate.sh` **SHALL** recriar, a cada criação do container, `~/.git-credentials` e o export
-de `GH_TOKEN`, lendo `GIT_USERNAME` de `.env` e `GIT_TOKKEN` de `.secrets` — arquivos separados na
-raiz do projeto —, resolvendo a raiz pelo próprio caminho do script (independente do nome da pasta).
+de `GH_TOKEN`, lendo `GIT_USERNAME` e `GIT_TOKKEN` de `.devcontainer/.env`, resolvendo a raiz do
+projeto pelo próprio caminho do script (independente do nome da pasta).
 
-* **Cenário: `.env` e `.secrets` presentes e completos**
-  * **WHEN** existem `GIT_USERNAME` em `.env` e `GIT_TOKKEN` em `.secrets`, ambos na raiz
+* **Cenário: `.devcontainer/.env` presente e completo**
+  * **WHEN** existem `GIT_USERNAME` e `GIT_TOKKEN` em `.devcontainer/.env`
   * **THEN** `~/.git-credentials` é escrito com permissão `600` (usuário url-encoded) e
     `~/.gh_token_env` é criado e carregado pelo `~/.bashrc`.
-* **Cenário: `.env`/`.secrets` ausentes ou incompletos**
-  * **WHEN** nenhum dos dois arquivos existe, ou `GIT_USERNAME`/`GIT_TOKKEN` não estão definidos
+* **Cenário: `.devcontainer/.env` ausente ou incompleto**
+  * **WHEN** o arquivo não existe, ou `GIT_USERNAME`/`GIT_TOKKEN` não estão definidos nele
   * **THEN** o passo correspondente é pulado com mensagem informativa e o `postCreate.sh` termina
     com sucesso.
-* **Cenário: separação de segredo e configuração**
+* **Cenário: local do segredo**
   * **WHEN** o usuário preenche as credenciais do projeto
-  * **THEN** `GIT_TOKKEN` (segredo) fica em `.secrets`, e `GIT_USERNAME`/`GIT_EMAIL`/`GIT_NAME`
-    (configuração, não-segredo) ficam em `.env` — ambos ignorados pelo git, mas em arquivos
-    distintos para reduzir o que precisa de cuidado extra de acesso.
+  * **THEN** `GIT_TOKKEN` (segredo) e a configuração não-sensível (`GIT_USERNAME`, `GIT_EMAIL`,
+    `GIT_NAME`) ficam no mesmo `.devcontainer/.env`, ignorado pelo git — o arquivo `.secrets`
+    separado na raiz foi descontinuado.
 * **Cenário: helper de credenciais**
   * **WHEN** o container sobe
   * **THEN** `credential.helper=store` prevalece (via `GIT_CONFIG_*` e
@@ -508,9 +514,8 @@ explícito, nunca implícito em um "Reopen in Container".
 
 * **Portabilidade:** o bootstrap funciona em Linux, macOS (bash) e Windows (PowerShell).
 * **Idempotência:** `postCreate.sh` pode rodar novamente sem duplicar entradas no `~/.bashrc`.
-* **Segurança:** o container roda como usuário não-root; segredos (`GIT_TOKKEN`) ficam isolados em
-  `.secrets`, separados da configuração não-sensível (`.env`); ambos os arquivos, e
-  `.devcontainer/.env`, são ignorados pelo git e `~/.git-credentials`/`~/.gh_token_env` são gravados
+* **Segurança:** o container roda como usuário não-root; o segredo (`GIT_TOKKEN`) fica em
+  `.devcontainer/.env`, ignorado pelo git, e `~/.git-credentials`/`~/.gh_token_env` são gravados
   com permissão `600`.
 * **Enxutez:** a imagem instala apenas o necessário (`--no-install-recommends`, limpeza de
   `/var/lib/apt/lists`); plugins e MCPs não entram na imagem.
@@ -549,9 +554,9 @@ devcontainer-ai-cli/
         Dockerfile-devcontainer < imagem Debian + CLIs de IA + uv/Node/Bun + apoio (RF7)
         docker-compose.yml      < service "app"; referencia a imagem por nome:tag (build: comentado, RF13)
         devcontainer.json       < bind mount de ~/.claude, ~/.gemini, ~/.codex; locale UTF-8
-        postCreate.sh           < credenciais git + GH_TOKEN a partir de .env/.secrets da raiz
+        postCreate.sh           < credenciais git + GH_TOKEN a partir de .devcontainer/.env
         devcontainer-lock.json  [t] órfão: travava a feature claude-code, hoje instalada via Dockerfile-devcontainer (ver §6 do CLAUDE.md)
-        .env.example            < DOCKER_IMAGE_NAME / DOCKER_IMAGE_TAG / CONTAINER_NAME / PROJECT_FOLDER
+        .env.example            < DOCKER_IMAGE_NAME / DOCKER_IMAGE_TAG / CONTAINER_NAME / PROJECT_FOLDER / GIT_* (inclui GIT_TOKKEN)
         .env                    [g] gerado pelo instalador
     .claude/                    [i] exceto settings.local.json, PRD.md e skills/
         PRD.md                  [t] este documento; não copiado nem regerado no projeto gerado
@@ -577,10 +582,8 @@ devcontainer-ai-cli/
         6-final-review.md       < aciona os review-* e o review-manager (camada 2 do RF12)
     skills-lock.json            [i] lock das skills instaladas
     .env.example                [i] configuração git não-sensível (modelo)
-    .secrets.example            [i] segredo git (GIT_TOKKEN, modelo)
     .gitignore                  [i]
     .env                        [g] configuração git, preenchida pelo usuário
-    .secrets                    [g] segredo git (GIT_TOKKEN), preenchido pelo usuário
     .vscode/                    [t] settings.json do editor (oculta .worktrees/ da árvore/busca)
     .worktrees/                 [t] git worktrees adicionais (vazio por padrão; ignorado pelo git)
     CLAUDE.md                   [t] guia de trabalho no repositório; não copiado
@@ -618,8 +621,9 @@ Não faz parte da primeira versão:
       `CONTAINER_NAME=meu-projeto-novo`, sem pergunta separada para o nome do container.
 * [ ] `name` em `devcontainer.json` reflete os dados informados, com JSON válido e com os
       comentários do arquivo preservados; a chave `description` não é coletada nem escrita.
-* [ ] O projeto gerado contém exatamente `.claude/`, `.devcontainer/`, `prompts/`, `scripts/`,
-      `.env.example`, `.secrets.example`, `.gitignore` e `skills-lock.json` — e nada além disso.
+* [ ] O projeto gerado contém exatamente `.claude/`, `.devcontainer/`, `prompts/`, `scripts/`
+      (sem `install.sh` e `install.ps1`), `.env.example`, `.gitignore` e `skills-lock.json` — e
+      nada além disso.
 * [ ] O projeto gerado **não** contém `README.md`, `CLAUDE.md`, `.claude/settings.local.json`,
       `.claude/skills/` nem `.agents/`.
 * [ ] `find <projeto> -xtype l` não retorna nenhum link simbólico quebrado.
@@ -631,9 +635,9 @@ Não faz parte da primeira versão:
       no PATH; `whoami` retorna `app`; `locale` retorna `C.UTF-8`.
 * [ ] `/home/app/.claude`, `/home/app/.gemini` e `/home/app/.codex` refletem os respectivos
       diretórios do host e sobrevivem a um rebuild.
-* [ ] Com `.env` e `.secrets` preenchidos, `git push` e `gh auth status` funcionam dentro do
-      container sem prompt interativo; sem eles, o `postCreate.sh` termina com sucesso e mensagem
-      informativa.
+* [ ] Com `GIT_USERNAME`/`GIT_TOKKEN` preenchidos em `.devcontainer/.env`, `git push` e
+      `gh auth status` funcionam dentro do container sem prompt interativo; sem eles, o
+      `postCreate.sh` termina com sucesso e mensagem informativa.
 * [ ] Rodar `postCreate.sh` duas vezes não duplica a linha de carregamento no `~/.bashrc`.
 * [ ] As skills marcadas `off` em `.claude/settings.local.json` não são ativadas na sessão.
 * [ ] `bash scripts/clean.sh -y` remove container e volumes do projeto e preserva o volume `vscode`.

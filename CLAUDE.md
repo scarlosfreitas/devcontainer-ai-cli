@@ -51,7 +51,8 @@ o projeto em `${PROJECT_FOLDER}` e o devcontainer entra por `workspaceFolder`.)
 
 **Lista fechada do RF6** — o projeto gerado recebe **apenas**: `.claude/` (exceto
 `settings.local.json`, `PRD.md`), `.devcontainer/`, `prompts/`,
-`scripts/`, `.env.example`, `.gitignore`, `skills-lock.json`. Nada além disso —
+`scripts/` (exceto `install.sh`, `install.ps1`), `.env.example`, `.gitignore`,
+`skills-lock.json`. Nada além disso —
 em especial, `.claude/PRD.md` **não** é regerado como esqueleto; o projeto nasce sem PRD. Ao mexer
 nos instaladores, verifique essa lista: ela é implementada como cópia item a item (nunca "copia tudo
 e apaga depois") e é validada por inteiro **antes** de a primeira cópia acontecer, para não deixar o

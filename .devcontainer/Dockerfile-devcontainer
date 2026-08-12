@@ -104,16 +104,23 @@ RUN if getent group "${HOST_GID}" > /dev/null; then \
         groupmod -g "${HOST_GID}" app; \
     fi \
     && usermod -u "${HOST_UID}" app \
-    && chown -R "${HOST_UID}:$(id -g app)" /home/app \
-    && mkdir -p /home/jovyan/work/notebooks /home/jovyan/work/data \
-    && chown -R "${HOST_UID}:$(id -g app)" /home/jovyan
+    && chown -R "${HOST_UID}:$(id -g app)" /home/app
 
 # Pré-cria os diretórios de config do Claude Code, Gemini e Codex com dono correto: quando o
 # devcontainer monta um volume nomeado vazio em /home/app/.claude, .gemini ou .codex pela
 # primeira vez, o Docker copia o conteúdo/dono deste diretório da imagem
 # para o volume. Sem isso, o ponto de montagem é criado como root e o
 # usuário app fica sem permissão de escrita.
-RUN mkdir -p /home/app/.claude /home/app/.gemini /home/app/.codex && chown -R app:app /home/app/.claude /home/app/.gemini /home/app/.codex
+RUN mkdir -p \
+    /home/app/.claude \
+    /home/app/.gemini \
+    /home/app/.codex \
+    /home/app/.agents \
+    && chown -R app:app \
+    /home/app/.claude \
+    /home/app/.gemini \
+    /home/app/.codex \
+    /home/app/.agents
 
 # --- ccusage (CLI de monitoramento de consumo de tokens Claude, via npm) ------
 # Instalação global (/usr/lib/node_modules + /usr/bin), ainda como root.

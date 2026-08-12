@@ -16,7 +16,7 @@
 
 ## 1. Visão Geral
 
-`devcontainer-ai-cli` (antigo `devc-debian-claude`) tem como objetivo entregar uma **imagem Docker
+`devcontainer-ai-cli` tem como objetivo entregar uma **imagem Docker
 e uma estrutura de projeto** dedicadas a desenvolvimento com **ferramentas de IA em linha de
 comando**: Claude Code (Anthropic), Codex CLI (OpenAI), Gemini CLI e Antigravity CLI/`agy`
 (Google), rodando lado a lado no mesmo Devcontainer Debian.
@@ -103,9 +103,7 @@ O produto não tem interface gráfica; a "navegação" é a sequência de comand
    partir do `.devcontainer/.env.example`, roda `git init` e cria o commit inicial. O
    `.claude/PRD.md` **não** é copiado nem regerado — o projeto nasce sem PRD, a ser escrito pelo
    usuário (`prompts/1-create-prd.md`).
-5. O usuário preenche `.env` (`GIT_USERNAME`/`GIT_EMAIL`/`GIT_NAME`, a partir de `.env.example`) e
-   `.secrets` (`GIT_TOKKEN`, a partir de `.secrets.example`) na raiz do projeto — o token fica
-   separado das demais credenciais para reduzir o que precisa de cuidado extra de acesso.
+5. O usuário preenche `.env` a partir de `.env.example` e `GIT_TOKKEN` o tokken manualmente
 6. O `docker-compose.yml` referencia a imagem pronta (`${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}`,
    RF13) em vez de buildar a partir do `Dockerfile-devcontainer` a cada subida — a imagem deve
    existir localmente (via `scripts/build-image-devcontainer.sh`, no modo padrão ou `--local`) ou
@@ -207,7 +205,7 @@ lugares**: `PROJECT_FOLDER` (em `.devcontainer/.env`) e `workspaceFolder` (em
 ### RF4 — Geração do `.devcontainer/.env`
 
 O instalador **SHALL** copiar `.devcontainer/.env.example` para `.devcontainer/.env` e atualizar
-`DOCKER_IMAGE_NAME` e `CONTAINER_NAME` com o nome do projeto normalizado (RF2), além de
+`DOCKER_IMAGE_NAME`, `CONTAINER_NAME` e `GIT_TOKKEN`  com o nome do projeto normalizado (RF2), além de
 `PROJECT_FOLDER` conforme o RF3.
 
 * **Cenário: nome com espaços e maiúsculas**
@@ -245,7 +243,6 @@ O instalador **SHALL** copiar para o projeto gerado **apenas** os itens abaixo, 
 | `prompts/` | diretório completo |
 | `scripts/` | diretório completo |
 | `.env.example` | arquivo da raiz |
-| `.secrets.example` | arquivo da raiz — modelo de `GIT_TOKKEN`, separado de `.env.example` |
 | `.gitignore` | arquivo da raiz |
 | `skills-lock.json` | arquivo da raiz |
 
@@ -532,15 +529,12 @@ Não há banco de dados nem carga de *seed*. As fontes de configuração do prod
 * **`.env` (raiz)** — configuração git não-sensível do usuário (`GIT_USERNAME`, `GIT_EMAIL`,
   `GIT_NAME`), a partir de `.env.example`. Consumido pelo `postCreate.sh`. Não versionado;
   preenchido pelo usuário.
-* **`.secrets` (raiz)** — segredo git do usuário (`GIT_TOKKEN`), a partir de `.secrets.example`.
-  Consumido pelo `postCreate.sh`. Não versionado; mantido separado de `.env` por ser credencial.
 * **`.devcontainer/.env`** — parâmetros da imagem e do container (`DOCKER_IMAGE_NAME`,
   `DOCKER_IMAGE_TAG`, `CONTAINER_NAME`, `PROJECT_FOLDER`), gerado pelo instalador a partir de
   `.devcontainer/.env.example`. Consumido pelo `docker-compose.yml` **e** pelo modo `--local` de
   `scripts/build-image-devcontainer.sh` (RF13) — o modo padrão desse script lê
   `.devcontainer/.env.example` do GitHub em vez do `.env` local. Não versionado.
 * **`skills-lock.json`** — origem, caminho e hash de cada skill instalada em `.agents/skills/`.
-* **`.claude/settings.local.json`** — overrides de ativação de skills por projeto (não versionado).
 
 ---
 
@@ -657,37 +651,3 @@ Não faz parte da primeira versão:
       de `.devcontainer/.env` local e conclui o build com a mesma tag.
 * [ ] Sem `DOCKER_IMAGE_NAME`/`DOCKER_IMAGE_TAG` no arquivo correspondente a cada modo,
       `scripts/build-image-devcontainer.sh` aborta com mensagem informativa, sem chamar `docker build`.
-
----
-
-## 11. Evoluções futuras
-
-* Estrutura documental de referência: `docs/domain/`, `docs/standards/`, `docs/guidelines/`, além
-  de `src/`, `test/` e `STATUS.md`.
-* **Mount do socket Docker.** O `Dockerfile-devcontainer` documenta que o cliente Docker fala com o
-  daemon do host "pelo `/var/run/docker.sock` montado (ver `devcontainer.json`)", mas o
-  `devcontainer.json` atual não declara esse mount nem `runArgs`/grupo `docker` do host — hoje o
-  cliente Docker instalado não tem daemon acessível até esse mount ser adicionado.
-* **`devcontainer-lock.json` órfão.** Travava a versão da feature `ghcr.io/.../claude-code`, que
-  não é mais referenciada em `devcontainer.json` (Claude Code passou a ser instalado via `npm` no
-  `Dockerfile-devcontainer`, RF7). Decidir entre remover o arquivo ou reintroduzir o uso de
-  features.
-* **`.claude/settings.json` ausente.** Documentação anterior do repositório citava hooks de bell
-  em `Stop`/`Notification` neste arquivo; ele não existe mais em `.claude/` — verificar se os
-  hooks foram intencionalmente removidos ou se o arquivo deve ser recriado.
-* **Generalização da camada 2 do RF12.** `prompts/3-create-agents.md` e `prompts/6-final-review.md`
-  estão presos à stack de origem (Blazor Web App, .NET 10, Bootstrap, JSInterop, prerendering);
-  precisam de uma variante agnóstica, em que o especialista de framework seja escolhido conforme a
-  stack do projeto. Os subagentes `review-*` em si não são versionados no template — são gerados
-  por prompt no projeto destino, e por isso `.claude/agents/` hoje contém apenas o `sdd-reviewer.md`.
-* **Neutralização do `sdd-reviewer.md`**, cujo texto ainda cita o projeto de origem (Copa2026,
-  ASP.NET Core + Blazor Server) na descrição do papel, embora o processo de revisão em si seja
-  agnóstico de stack.
-* Escrita do `prompts/5-new-feature-script.md`, hoje vazio.
-* Preenchimento automático do `.env`/`.secrets` da raiz pelo instalador, hoje manual por conter
-  segredo (`.secrets`).
-* Suporte multiarquitetura (`arm64`) na imagem de desenvolvimento.
-* Testes automatizados do bootstrap (`install.sh`/`install.ps1`) em CI.
-* Seleção interativa de skills e plugins durante a instalação.
-* Publicação da imagem construída por `scripts/build-image-devcontainer.sh` em um registry, hoje mantida só
-  local — sem isso, o cenário "imagem publicada" do RF13 é apenas teórico.

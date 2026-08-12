@@ -1,3 +1,6 @@
+# Comando para Build da Imagem
+# docker build -t devcontainer-ai-cli:0.7 -f .devcontainer/Dockerfile-devcontainer .
+
 # Infra de DESENVOLVIMENTO. Também pode ser construída isoladamente via
 # scripts/build-image-devcontainer.sh (fora do docker-compose), para
 # reutilizar esta mesma imagem como base de referência em outros projetos.
@@ -68,13 +71,42 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
 # --- uv (gerenciador de dependências/ambiente Python do projeto) --------------
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
+# 0. Alinha o UID/GID do usuário "app" (1000:1000 na imagem base) com o do
+# usuário do host, para que os arquivos montados via bind mount (workspace,
+# ~/.claude, ~/.gemini, ~/.codex, ~/.config/rclone) apareçam como pertencentes
+# ao "app" dentro do container. "updateRemoteUserUID" do devcontainer.json não
+# resolve isso: só tem efeito em configs baseadas em image/Dockerfile, não em
+# dockerComposeFile. Se o GID do host já existir na imagem (ex.: "docker"),
+# apenas adiciona "app" a esse grupo em vez de tentar renumerar (evita erro
+# de GID duplicado).
+#
+# O chown de /home/jovyan/work acontece AQUI (não mais numa RUN separada lá
+# embaixo, perto do mkdir): "chown -R app:app" resolvido por nome, numa layer
+# própria, ficava vulnerável a cache do Docker ficar "preso" num HOST_UID
+# antigo caso o layer anterior fosse reaproveitado — foi o que causou o botão
+# "+ New Chat" do Jupyter AI falhar (403 silencioso) com o diretório dono de
+# um UID órfão. Usando ${HOST_UID}/${HOST_GID} diretamente aqui, o cache
+# deste RUN fica atrelado aos mesmos ARGs do remapeamento acima, então uma
+# mudança de UID/GID sempre invalida os dois juntos.
+ARG HOST_UID=1000
+ARG HOST_GID=1000
 # --- Usuário não-root (UID/GID 1000, casa com o fallback do docker-compose) ---
-RUN groupadd --gid 1000 app \
-    && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash app \
+RUN groupadd --gid "${HOST_GID}" app \
+    && useradd --uid "${HOST_UID}" --gid "${HOST_GID}" --create-home --shell /bin/bash app \
     && groupadd -f docker \
     && usermod -aG docker app \
     && echo "app ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/app \
     && chmod 0440 /etc/sudoers.d/app
+
+RUN if getent group "${HOST_GID}" > /dev/null; then \
+        usermod -aG "${HOST_GID}" app; \
+    else \
+        groupmod -g "${HOST_GID}" app; \
+    fi \
+    && usermod -u "${HOST_UID}" app \
+    && chown -R "${HOST_UID}:$(id -g app)" /home/app \
+    && mkdir -p /home/jovyan/work/notebooks /home/jovyan/work/data \
+    && chown -R "${HOST_UID}:$(id -g app)" /home/jovyan
 
 # Pré-cria os diretórios de config do Claude Code, Gemini e Codex com dono correto: quando o
 # devcontainer monta um volume nomeado vazio em /home/app/.claude, .gemini ou .codex pela
@@ -100,6 +132,19 @@ RUN npm install -g @google/gemini-cli
 # Instalação global, ainda como root. Usa o diretório /home/app/.claude
 # pré-criado acima para config/credenciais do usuário app.
 RUN npm install -g @anthropic-ai/claude-code
+
+# --- Adaptadores ACP (Node.js/npm e as CLIs @anthropic-ai/claude-code e
+# @openai/codex já vêm da imagem base), necessários para Claude e Codex
+# aparecerem como opções de agente no chat do Jupyter AI, junto do GitHub
+# Copilot.
+RUN npm install -g @agentclientprotocol/claude-agent-acp @zed-industries/codex-acp
+
+# 0b. A imagem base instala o Claude Code CLI via "npm install -g" como
+# root, então /usr/lib/node_modules/@anthropic-ai/claude-code fica com
+# dono root:root — o próprio auto-update do Claude Code roda como "app" e
+# falha silenciosamente (erro "no_permissions") sem este chown.
+#RUN chown -R app:app /usr/lib/node_modules/@anthropic-ai/claude-code
+RUN chown -R app:app /usr/lib/node_modules/
 
 # --- Codex CLI (OpenAI) ---------------------------------------------------------
 # Instalação global, ainda como root. Usa o diretório /home/app/.codex

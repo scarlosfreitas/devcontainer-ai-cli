@@ -1,1 +1,1 @@
-FROM devcontainer-ai-cli:0.6
+FROM devcontainer-ai-cli:0.7

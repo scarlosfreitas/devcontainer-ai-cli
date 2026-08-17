@@ -122,8 +122,19 @@ RUN mkdir -p \
     /home/app/.codex \
     /home/app/.agents
 
+# O prefixo global padrão do npm (pacote nodejs da NodeSource) é "/usr", o que
+# faria "npm install -g" gravar pacotes em /usr/lib/node_modules e os
+# symlinks de bin em /usr/bin. Só que /usr/bin também guarda binários
+# setuid-root do sistema (sudo, su) — um "chown -R app:app /usr/bin" para
+# destravar o auto-update das CLIs quebraria o bit setuid deles. Por isso
+# redirecionamos o prefixo global do npm para /usr/local (mesmo padrão já
+# usado abaixo para bun/uv/agy: diretório dedicado a binários instalados
+# manualmente, sem nada setuid, seguro de chownar por inteiro) antes de
+# qualquer "npm install -g". /usr/local/bin já vem antes de /usr/bin no PATH.
+ENV NPM_CONFIG_PREFIX=/usr/local
+
 # --- ccusage (CLI de monitoramento de consumo de tokens Claude, via npm) ------
-# Instalação global (/usr/lib/node_modules + /usr/bin), ainda como root.
+# Instalação global (/usr/local/lib/node_modules + /usr/local/bin), ainda como root.
 RUN npm install -g ccusage
 
 # --- OpenSpec (CLI de spec-driven development, comandos /opsx:*) --------------
@@ -146,17 +157,21 @@ RUN npm install -g @anthropic-ai/claude-code
 # Copilot.
 RUN npm install -g @agentclientprotocol/claude-agent-acp @zed-industries/codex-acp
 
-# 0b. A imagem base instala o Claude Code CLI via "npm install -g" como
-# root, então /usr/lib/node_modules/@anthropic-ai/claude-code fica com
-# dono root:root — o próprio auto-update do Claude Code roda como "app" e
-# falha silenciosamente (erro "no_permissions") sem este chown.
-#RUN chown -R app:app /usr/lib/node_modules/@anthropic-ai/claude-code
-RUN chown -R app:app /usr/lib/node_modules/
-
 # --- Codex CLI (OpenAI) ---------------------------------------------------------
 # Instalação global, ainda como root. Usa o diretório /home/app/.codex
 # pré-criado acima para config/credenciais do usuário app.
 RUN npm install -g @openai/codex
+
+# 0b. Todas as CLIs acima foram instaladas via "npm install -g" ainda como
+# root (prefixo /usr/local, ver ENV acima), então tanto os pacotes em
+# /usr/local/lib/node_modules quanto os symlinks de bin em /usr/local/bin
+# (claude, gemini, codex, openspec, ccusage) ficam com dono root:root. O
+# auto-update de cada CLI roda como "app" e precisa reescrever os dois — sem
+# este chown, o auto-update falha silenciosamente com "no write permission to
+# npm prefix". Fica no fim do bloco de instalações globais, depois do último
+# "npm install -g", para cobrir todos os pacotes de uma vez (um chown no meio
+# do bloco deixaria os instalados depois dele com dono root:root de novo).
+RUN chown -R app:app /usr/local/lib/node_modules/ /usr/local/bin/
 
 # --- Bun (runtime/gerenciador JS) — instalação global -------------------------
 # BUN_INSTALL redireciona o instalador oficial (que por padrão usa $HOME/.bun)

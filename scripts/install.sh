@@ -118,7 +118,7 @@ log "copiando arquivos para '$TARGET_DIR'..."
 for d in .claude .devcontainer prompts scripts; do
   [[ -d "$TMP_DIR/$d" ]] || die "item obrigatório ausente no template: $d/"
 done
-for f in .env.example .gitignore skills-lock.json; do
+for f in .gitignore skills-lock.json; do
   [[ -f "$TMP_DIR/$f" ]] || die "item obrigatório ausente no template: $f"
 done
 
@@ -138,7 +138,7 @@ for p in "$TMP_DIR"/scripts/*; do
   cp -a "$p" "$TARGET_DIR/scripts/"
 done
 shopt -u dotglob nullglob
-for f in .env.example .gitignore skills-lock.json; do
+for f in .gitignore skills-lock.json; do
   cp -a "$TMP_DIR/$f" "$TARGET_DIR/$f"
 done
 

@@ -112,7 +112,7 @@ try {
   # estiver aqui (README.md, CLAUDE.md, .claude/PRD.md, .claude/settings.local.json,
   # .agents/skills/, ...) fica só no template.
   $dirItems = @('.claude', '.devcontainer', 'prompts', 'scripts')
-  $fileItems = @('.env.example', '.gitignore', 'skills-lock.json')
+  $fileItems = @('.gitignore', 'skills-lock.json')
   # scripts/ vai item a item, pulando os instaladores: install.sh e install.ps1
   # materializam um projeto novo a partir do template e não têm função dentro
   # do projeto gerado.
